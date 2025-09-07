@@ -18,7 +18,7 @@ environ.Env.read_env(os.path.join(BASE_DIR, '.env'))
 # .env faylidan o'zgaruvchilarni olish
 DEBUG = env.bool('DEBUG', default=False)  # DEBUG boole'ga konvertatsiya qilinadi
 BOT_TOKEN = env("BOT_TOKEN")
-WORK_GROP_ID = env("WORK_GROP_ID")
+WORK_GROP_ID = env("WORK_GROUP_ID")
 SECRET_KEY = env('SECRET_KEY')
 APP_URL=env("APP_URL", default="http://127.0.0.1")
 

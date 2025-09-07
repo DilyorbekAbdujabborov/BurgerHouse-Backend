@@ -1,6 +1,5 @@
 from django.contrib import admin
 from django.utils.html import format_html
-from django.contrib import messages
 from import_export import resources
 from import_export.admin import ImportExportModelAdmin
 from .models import Order, Foydalanuvchi, Category, Product, OrderProduct
@@ -33,6 +32,8 @@ class OrderAdmin(ImportExportModelAdmin, admin.ModelAdmin):
             return format_html('<span style="color: yellow;">🔨</span>')  # Sariq o'zgartirish belgisi
         elif obj.status == 'delivering':
             return format_html('<span style="color: red;">🚚</span>')  # Qizil yuk tashish belgisi
+        elif obj.status == 'new':
+            return format_html('<span style="color: gray;">🆕</span>')  # Kulrang yangi belgisi
         return "-"
 
     def status_text(self, obj):
@@ -43,6 +44,7 @@ class OrderAdmin(ImportExportModelAdmin, admin.ModelAdmin):
             'preparing': 'Tayyorlanmoqda',
             'delivering': 'Yetkazilmoqda',
             'delivered': 'Yetkazib berildi',
+            'new': 'Yangi',
         }
         return status_dict.get(obj.status, "-")
 

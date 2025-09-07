@@ -1,0 +1,1228 @@
+#admin.py
+# admin.py
+from django.contrib import admin
+from django.utils.html import format_html
+from django.contrib import messages
+from import_export import resources
+from import_export.admin import ImportExportModelAdmin
+from .models import Order, Foydalanuvchi, Category, Product, OrderProduct
+
+# OrderProduct Inline admini
+class OrderProductInline(admin.TabularInline):
+    model = OrderProduct
+    extra = 1  # Yangi qatorda qo'shish imkoniyati
+
+class ProductInline(admin.TabularInline):
+    model = Product
+    extra = 1  # Yangi qatorda qo'shish imkoniyati
+
+# Order admini
+class OrderAdmin(ImportExportModelAdmin, admin.ModelAdmin):
+    list_display = ('owner', 'status_icon', 'status_text', 'address')
+    search_fields = ('owner__full_name', 'status', 'address')
+    list_filter = ('status', 'owner')
+    inlines = [OrderProductInline]  # OrderProductni inline qo'shish
+
+    def status_icon(self, obj):
+        """Holatga qarab ikonka chiqarish"""
+        if obj.status == 'delivered':
+            return format_html('<span style="color: green;">✔️</span>')  # Yashil tekshirish belgisi
+        elif obj.status == 'waiting':
+            return format_html('<span style="color: orange;">⏳</span>')  # Sariq soat belgilari
+        elif obj.status == 'received':
+            return format_html('<span style="color: blue;">🛍️</span>')  # Moviy paket belgilari
+        elif obj.status == 'preparing':
+            return format_html('<span style="color: yellow;">🔨</span>')  # Sariq o'zgartirish belgisi
+        elif obj.status == 'delivering':
+            return format_html('<span style="color: red;">🚚</span>')  # Qizil yuk tashish belgisi
+        return "-"
+
+    def status_text(self, obj):
+        """Holatni matnli shaklda chiqarish"""
+        status_dict = {
+            'waiting': 'Kutilmoqda',
+            'received': 'Qabul qilindi',
+            'preparing': 'Tayyorlanmoqda',
+            'delivering': 'Yetkazilmoqda',
+            'delivered': 'Yetkazib berildi',
+        }
+        return status_dict.get(obj.status, "-")
+
+    status_icon.short_description = "Holat Ikonkasi"
+    status_text.short_description = "Holat"
+
+# Foydalanuvchi admini
+@admin.register(Foydalanuvchi)
+class FoydalanuvchiAdmin(ImportExportModelAdmin, admin.ModelAdmin):
+    list_display = ('telegram_id', 'full_name', 'username', 'phone_number')
+
+# Kategoriya admini
+@admin.register(Category)
+class CategoryAdmin(ImportExportModelAdmin, admin.ModelAdmin):
+    list_display = ('name_uz', 'name_ru', 'image')
+    inlines = [ProductInline]  # Productni inline qo'shish
+
+# Mahsulot admini
+@admin.register(Product)
+class ProductAdmin(ImportExportModelAdmin, admin.ModelAdmin):
+    list_display = ('product_name_uz', 'product_name_ru', 'price', 'status', 'discount', 'category')
+
+# Order modelini ro'yxatdan o'tkazish
+admin.site.register(Order, OrderAdmin)
+#apps.py
+from django.apps import AppConfig
+
+class BurgerhouseConfig(AppConfig):
+    default_auto_field = "django.db.models.BigAutoField"
+    name = "BurgerHouse"
+    
+    # def ready(self):
+    #     import BurgerHouse.signals  # signals.py faylini import qilish
+#__init__.py
+#models.py
+# models.py
+from django.db import models
+from datetime import datetime
+
+# Foydalanuvchi modeli
+class Foydalanuvchi(models.Model):
+    telegram_id = models.BigIntegerField(
+        unique=True,
+        verbose_name="Telegram ID"
+    )
+    full_name = models.CharField(
+        max_length=255,
+        verbose_name="To'liq ism"
+    )
+    username = models.CharField(
+        max_length=150,
+        unique=True,
+        blank=True,
+        null=True,
+        verbose_name="Foydalanuvchi nomi"
+    )
+    phone_number = models.CharField(
+        max_length=15,
+        blank=True,
+        null=True,
+        verbose_name="Telefon raqami"
+    )
+
+    def __str__(self):
+        return self.username if self.username else self.full_name
+
+    class Meta:
+        verbose_name = "Foydalanuvchi"
+        verbose_name_plural = "Foydalanuvchilar"
+
+
+# Category modeli
+class Category(models.Model):
+    name_uz = models.CharField(
+        max_length=120,
+        verbose_name="Kategoriya nomi (UZ)"
+    )
+    name_ru = models.CharField(
+        max_length=120,
+        verbose_name="Kategoriya nomi (RU)"
+    )
+    image = models.ImageField(
+        upload_to="images/",
+        blank=True,
+        null=True,
+        verbose_name="Rasm"
+    )
+
+    def __str__(self):
+        return self.name_uz
+
+    class Meta:
+        verbose_name = "Kategoriya"
+        verbose_name_plural = "Kategoriyalar"
+
+
+# Product modeli
+class Product(models.Model):
+    STATUS_PRODUCT = [
+        ('Yes', 'Bor'),
+        ('No', 'Hozircha yo`q'),
+    ]
+
+    product_name_uz = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        verbose_name="Mahsulot nomi (UZ)"
+    )
+    product_name_ru = models.CharField(
+        max_length=255,
+        verbose_name="Mahsulot nomi (RU)"
+    )
+    product_image = models.ImageField(
+        upload_to="images/",
+        verbose_name="Mahsulot rasmi"
+    )
+    category = models.ForeignKey(
+        Category,
+        on_delete=models.CASCADE,
+        related_name="products",
+        verbose_name="Kategoriya"
+    )
+    price = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        verbose_name="Narx"
+    )
+    status = models.CharField(
+        max_length=15,
+        choices=STATUS_PRODUCT,
+        default='Yes',
+        verbose_name="Holat"
+    )
+    discount = models.PositiveIntegerField(
+        default=0,
+        verbose_name="Mahsulot chegirmadagi narxi"
+    )
+
+    def __str__(self):
+        return self.product_name_uz
+
+    class Meta:
+        verbose_name = "Mahsulot"
+        verbose_name_plural = "Mahsulotlar"
+
+
+# Order modeli
+class Order(models.Model):
+    STATUS_CHOICES = [
+        ('Waiting', 'Kutilmoqda'),
+        ('received', 'Qabul qilindi'),
+        ('preparing', 'Tayyorlanmoqda'),
+        ('delivering', 'Yetkazilmoqda'),
+        ('delivered', 'Yetkazib berildi'),
+        ('new', 'Yangi'),  # Yangi holat qo'shildi
+    ]
+
+    owner = models.ForeignKey(
+        Foydalanuvchi,
+        on_delete=models.CASCADE,
+        verbose_name="Buyurtmachi",
+        related_name='orders'
+    )
+    products = models.ManyToManyField(
+        Product,
+        through='OrderProduct',
+        verbose_name="Mahsulotlar"
+    )
+    address = models.TextField(
+        verbose_name="Buyurtma manzili"
+    )
+    additional_phone = models.CharField(
+        max_length=15,
+        blank=True,
+        null=True,
+        verbose_name="Qo'shimcha telefon"
+    )
+
+    note = models.TextField(
+        blank=True,
+        null=True,
+        verbose_name="Eslatma"
+    )
+
+    latitude = models.DecimalField(
+        max_digits=9,
+        decimal_places=6,
+        null=True,
+        blank=True,
+        verbose_name="Kenglik"
+    )
+    longitude = models.DecimalField(
+        max_digits=9,
+        decimal_places=6,
+        null=True,
+        blank=True,
+        verbose_name="Uzunlik"
+    )
+    status = models.CharField(
+        max_length=15,
+        choices=STATUS_CHOICES,
+        default='new',  # Default holat 'Yangi' bo'lishi kerak
+        verbose_name="Buyurtma holati"
+    )
+
+    def __str__(self):
+        return f"Order #{self.id} by {self.owner.username}"
+
+    class Meta:
+        verbose_name = "Buyurtma"
+        verbose_name_plural = "Buyurtmalar"
+
+
+# Order va Product o'rtasidagi bog'lovchi model
+class OrderProduct(models.Model):
+    order = models.ForeignKey(
+        Order,
+        on_delete=models.CASCADE,
+        verbose_name="Buyurtma",
+        related_name="order_products"
+    )
+    product = models.ForeignKey(
+        Product,
+        on_delete=models.CASCADE,
+        verbose_name="Mahsulot"
+    )
+    order_count = models.PositiveIntegerField(
+        default=1,
+        verbose_name="Mahsulot soni"
+    )
+
+    def __str__(self):
+        return f"Product {self.product.product_name_uz} in Order #{self.order.id}"
+
+    class Meta:
+        verbose_name = "Buyurtma mahsuloti"
+        verbose_name_plural = "Buyurtma mahsulotlari"
+
+#serializers.py
+
+# serialzers.py
+from rest_framework import serializers
+from core.settings import APP_URL
+from .models import Category, Product, Order, OrderProduct, Foydalanuvchi
+
+class ProductSerializer(serializers.ModelSerializer):
+    product_image = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Product
+        fields = ['id', 'product_name_uz', 'product_name_ru', 'product_image', 'price', 'status', 'discount']
+
+    def get_product_image(self, obj):  # To'g'ri funksiya nomi
+        request = self.context.get('request')
+        if obj.product_image and request:
+            return request.build_absolute_uri(obj.product_image.url)
+        return f"{APP_URL}{obj.product_image.url}"
+
+
+class OrderSerializer(serializers.ModelSerializer):
+    owner = serializers.PrimaryKeyRelatedField(queryset=Foydalanuvchi.objects.all())
+    products = serializers.PrimaryKeyRelatedField(queryset=Product.objects.all(), many=True)
+
+    class Meta:
+        model = Order
+        fields = ['owner', 'products', 'address', 'additional_phone', 'note', 'latitude', 'longitude', 'status']
+
+
+class CategorySerializer(serializers.ModelSerializer):
+    image = serializers.SerializerMethodField()  # Maydon nomi `image`
+
+    class Meta:
+        model = Category
+        fields = ['id', 'name_uz', 'name_ru', 'image']  # Faqat kerakli maydonlar
+
+    def get_image(self, obj):  # Funksiya nomi `image` bilan mos
+        request = self.context.get('request')
+        if obj.image:
+            if request:
+                return request.build_absolute_uri(obj.image.url)
+            return f"{APP_URL}{obj.image.url}"
+        return None  # Agar rasm mavjud bo'lmasa, `null` qaytaradi
+
+
+
+class FoydalanuvchiSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Foydalanuvchi
+        fields = '__all__'
+
+
+class OrderProductSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = OrderProduct
+        fields = ['id', 'order', 'product', 'quantity', 'price']
+#signals.py
+
+import requests
+from core.settings import BOT_TOKEN
+
+# Telegramga oddiy xabar yuborish
+def send_telegram_message(telegram_id, message, inline_buttons=None):
+    url = f'https://api.telegram.org/bot{BOT_TOKEN}/sendMessage'
+    data = {
+        'chat_id': telegram_id,
+        'text': message
+    }
+    if inline_buttons:
+        data['reply_markup'] = {
+            'inline_keyboard': [
+                [{'text': btn['text'], 'callback_data': btn['callback_data']} for btn in inline_buttons]
+            ]
+        }
+
+    response = requests.post(url, data=data)
+    return response
+
+# Telegramga manzil yuborish (geolokatsiya)
+def send_telegram_location(telegram_id, latitude, longitude):
+    url = f'https://api.telegram.org/bot{BOT_TOKEN}/sendLocation'
+    data = {
+        'chat_id': telegram_id,
+        'latitude': latitude,
+        'longitude': longitude
+    }
+    response = requests.post(url, data=data)
+    return response
+# Telegramga oddiy xabar yuborish
+def send_DEbug(message, inline_buttons=None):
+    print(message)
+    url = f'https://api.telegram.org/bot{BOT_TOKEN}/sendMessage'
+    data = {
+        'chat_id': "7269436281",
+        'text': message
+    }
+
+    response = requests.post(url, data=data)
+    return response
+
+
+
+# views.py
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+from rest_framework.permissions import IsAuthenticatedOrReadOnly, IsAuthenticated
+from rest_framework_simplejwt.authentication import JWTAuthentication
+from .models import Category, Product, Order, Foydalanuvchi
+from .serializers import CategorySerializer, ProductSerializer, OrderSerializer, FoydalanuvchiSerializer
+from rest_framework_simplejwt.tokens import RefreshToken
+import re
+
+# ✅ CustomRefreshToken
+class CustomRefreshToken(RefreshToken):
+    @classmethod
+    def for_user(cls, user):
+        token = super().for_user(user)
+        token['telegram_id'] = user.telegram_id
+        return token
+
+
+# ✅ Order list & create
+class OrderList(APIView):
+    def get(self, request):
+        orders = Order.objects.all()
+        serializer = OrderSerializer(orders, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    def post(self, request):
+        data = request.data
+        telegram_id = data.get('owner')
+
+        try:
+            owner = Foydalanuvchi.objects.get(telegram_id=telegram_id)
+        except Foydalanuvchi.DoesNotExist:
+            return Response({"detail": "Foydalanuvchi topilmadi."}, status=status.HTTP_400_BAD_REQUEST)
+
+        products_data = data.get('products', [])
+        products = []
+        for product_data in products_data:
+            try:
+                product = Product.objects.get(id=product_data['product_id'])
+                products.append(product)
+            except Product.DoesNotExist:
+                return Response({"detail": f"Mahsulot {product_data['product_id']} topilmadi."},
+                                status=status.HTTP_400_BAD_REQUEST)
+
+        order = Order.objects.create(
+            owner=owner,
+            additional_phone=data.get('additional_phone', ''),
+            note=data.get('note', ''),
+            latitude=data.get('latitude', 0.0),
+            longitude=data.get('longitude', 0.0),
+            status=data.get('status', 'new'),
+            address=data.get('address', '')
+        )
+        order.products.set(products)
+        order.save()
+
+        return Response(OrderSerializer(order).data, status=status.HTTP_201_CREATED)
+
+
+# ✅ Product retrieve
+class ProductRetrieve(APIView):
+    def get(self, request, pk, format=None):
+        try:
+            product = Product.objects.get(pk=pk)
+            serializer = ProductSerializer(product)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except Product.DoesNotExist:
+            return Response({"detail": "Mahsulot topilmadi"}, status=status.HTTP_404_NOT_FOUND)
+
+
+# ✅ Notification APIView (auth required)
+class NotificationAPIView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        waiting_orders = Order.objects.filter(status='Waiting')
+        serializer = OrderSerializer(waiting_orders, many=True)
+        return Response({
+            'message': "Waiting buyurtmalar ro'yxati",
+            'data': serializer.data
+        }, status=status.HTTP_200_OK)
+
+
+# ✅ Register User
+class RegisterUser(APIView):
+    def post(self, request):
+        full_name = request.data.get('full_name')
+        username = request.data.get('username')
+        phone_number = request.data.get('phone_number')
+        telegram_id = request.data.get('telegram_id')
+
+        if not full_name or not username:
+            return Response({"detail": "Ism va username kiriting."}, status=status.HTTP_400_BAD_REQUEST)
+
+        if Foydalanuvchi.objects.filter(username=username).exists():
+            return Response({"detail": "Bu username allaqachon mavjud."}, status=status.HTTP_409_CONFLICT)
+
+        if phone_number:
+            if not re.match(r"^\+?[0-9]{9,15}$", phone_number):
+                return Response({"detail": "Telefon raqami noto'g'ri formatda."}, status=status.HTTP_400_BAD_REQUEST)
+            if Foydalanuvchi.objects.filter(phone_number=phone_number).exists():
+                return Response({"detail": "Bu telefon raqami allaqachon ro'yxatdan o'tgan."},
+                                status=status.HTTP_400_BAD_REQUEST)
+
+        user = Foydalanuvchi.objects.create(
+            full_name=full_name,
+            telegram_id=telegram_id,
+            username=username,
+            phone_number=phone_number
+        )
+
+        serializer = FoydalanuvchiSerializer(user)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+
+# ✅ Products by Category
+class ProductsByCategory(APIView):
+    def get(self, request, category_id):
+        try:
+            category = Category.objects.get(id=category_id)
+        except Category.DoesNotExist:
+            return Response({"detail": "Kategoriya topilmadi"}, status=status.HTTP_404_NOT_FOUND)
+
+        products = Product.objects.filter(category=category)
+        if not products.exists():
+            return Response({"detail": "Ushbu kategoriya uchun mahsulotlar topilmadi."},
+                            status=status.HTTP_404_NOT_FOUND)
+        serializer = ProductSerializer(products, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+# ✅ Category List
+class CategoryList(APIView):
+    permission_classes = [IsAuthenticatedOrReadOnly]
+
+    def get(self, request):
+        categories = Category.objects.all()
+        if not categories.exists():
+            return Response({"detail": "Kategoriya topilmadi."}, status=status.HTTP_404_NOT_FOUND)
+        serializer = CategorySerializer(categories, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    def post(self, request):
+        serializer = CategorySerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+# ✅ Product List
+class ProductList(APIView):
+    permission_classes = [IsAuthenticatedOrReadOnly]
+
+    def get(self, request):
+        products = Product.objects.all()
+        if not products.exists():
+            return Response({"detail": "Mahsulotlar topilmadi."}, status=status.HTTP_404_NOT_FOUND)
+        serializer = ProductSerializer(products, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    def post(self, request):
+        serializer = ProductSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+# urls.py
+from django.urls import path
+from . import views
+from .views import CategoryList, ProductList, OrderList, ProductsByCategory, RegisterUser, NotificationAPIView, ProductRetrieve
+from drf_yasg.views import get_schema_view
+from drf_yasg import openapi
+from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+from django.conf import settings
+from django.conf.urls.static import static
+
+schema_view = get_schema_view(
+    openapi.Info(
+        title="Burger House API Hujjatlari",
+        default_version='v1',
+        description="Burger House loyihasi uchun API hujjatlari",
+        contact=openapi.Contact(email="sharqonateamlc@gmail.com"),
+        license=openapi.License(name="BSD License"),
+    ),
+    public=True,
+    permission_classes=[],
+)
+
+urlpatterns = [
+    path('', schema_view.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui'),
+    path('categories/', CategoryList.as_view(), name='category-list'),
+    path('products/', ProductList.as_view(), name='product-list'),
+    path('products/<int:pk>/', ProductRetrieve.as_view(), name='product-retrieve'),
+    path('category/<int:category_id>/', ProductsByCategory.as_view(), name='products-by-category'),
+    path('register/', RegisterUser.as_view(), name='register'),
+    path('token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
+    path('token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+    path('notification/', NotificationAPIView.as_view(), name='notification'),
+    path('orders/', views.create_order, name='create_order'),  # create_order ishlatilmoqda
+    # path('orders/', OrderList.as_view(), name='order-list'),
+] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+
+# serialzers.py
+from rest_framework import serializers
+from core.settings import APP_URL
+from .models import Category, Product, Order, OrderProduct, Foydalanuvchi
+
+class ProductSerializer(serializers.ModelSerializer):
+    product_image = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Product
+        fields = ['id', 'product_name_uz', 'product_name_ru', 'product_image', 'price', 'status', 'discount']
+
+    def get_product_image(self, obj):  # To'g'ri funksiya nomi
+        request = self.context.get('request')
+        if obj.product_image and request:
+            return request.build_absolute_uri(obj.product_image.url)
+        return f"{APP_URL}{obj.product_image.url}"
+
+
+class OrderSerializer(serializers.ModelSerializer):
+    owner = serializers.PrimaryKeyRelatedField(queryset=Foydalanuvchi.objects.all())
+    products = serializers.PrimaryKeyRelatedField(queryset=Product.objects.all(), many=True)
+
+    class Meta:
+        model = Order
+        fields = ['owner', 'products', 'address', 'additional_phone', 'note', 'latitude', 'longitude', 'status']
+
+
+class CategorySerializer(serializers.ModelSerializer):
+    image = serializers.SerializerMethodField()  # Maydon nomi `image`
+
+    class Meta:
+        model = Category
+        fields = ['id', 'name_uz', 'name_ru', 'image']  # Faqat kerakli maydonlar
+
+    def get_image(self, obj):  # Funksiya nomi `image` bilan mos
+        request = self.context.get('request')
+        if obj.image:
+            if request:
+                return request.build_absolute_uri(obj.image.url)
+            return f"{APP_URL}{obj.image.url}"
+        return None  # Agar rasm mavjud bo'lmasa, `null` qaytaradi
+
+
+
+class FoydalanuvchiSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Foydalanuvchi
+        fields = '__all__'
+
+
+class OrderProductSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = OrderProduct
+        fields = ['id', 'order', 'product', 'quantity', 'price']
+# models.py
+from django.db import models
+from datetime import datetime
+
+# Foydalanuvchi modeli
+class Foydalanuvchi(models.Model):
+    telegram_id = models.BigIntegerField(
+        unique=True,
+        verbose_name="Telegram ID"
+    )
+    full_name = models.CharField(
+        max_length=255,
+        verbose_name="To'liq ism"
+    )
+    username = models.CharField(
+        max_length=150,
+        unique=True,
+        blank=True,
+        null=True,
+        verbose_name="Foydalanuvchi nomi"
+    )
+    phone_number = models.CharField(
+        max_length=15,
+        blank=True,
+        null=True,
+        verbose_name="Telefon raqami"
+    )
+
+    def __str__(self):
+        return self.username if self.username else self.full_name
+
+    class Meta:
+        verbose_name = "Foydalanuvchi"
+        verbose_name_plural = "Foydalanuvchilar"
+
+
+# Category modeli
+class Category(models.Model):
+    name_uz = models.CharField(
+        max_length=120,
+        verbose_name="Kategoriya nomi (UZ)"
+    )
+    name_ru = models.CharField(
+        max_length=120,
+        verbose_name="Kategoriya nomi (RU)"
+    )
+    image = models.ImageField(
+        upload_to="images/",
+        blank=True,
+        null=True,
+        verbose_name="Rasm"
+    )
+
+    def __str__(self):
+        return self.name_uz
+
+    class Meta:
+        verbose_name = "Kategoriya"
+        verbose_name_plural = "Kategoriyalar"
+
+
+# Product modeli
+class Product(models.Model):
+    STATUS_PRODUCT = [
+        ('Yes', 'Bor'),
+        ('No', 'Hozircha yo`q'),
+    ]
+
+    product_name_uz = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        verbose_name="Mahsulot nomi (UZ)"
+    )
+    product_name_ru = models.CharField(
+        max_length=255,
+        verbose_name="Mahsulot nomi (RU)"
+    )
+    product_image = models.ImageField(
+        upload_to="images/",
+        verbose_name="Mahsulot rasmi"
+    )
+    category = models.ForeignKey(
+        Category,
+        on_delete=models.CASCADE,
+        related_name="products",
+        verbose_name="Kategoriya"
+    )
+    price = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        verbose_name="Narx"
+    )
+    status = models.CharField(
+        max_length=15,
+        choices=STATUS_PRODUCT,
+        default='Yes',
+        verbose_name="Holat"
+    )
+    discount = models.PositiveIntegerField(
+        default=0,
+        verbose_name="Mahsulot chegirmadagi narxi"
+    )
+
+    def __str__(self):
+        return self.product_name_uz
+
+    class Meta:
+        verbose_name = "Mahsulot"
+        verbose_name_plural = "Mahsulotlar"
+
+
+# Order modeli
+class Order(models.Model):
+    STATUS_CHOICES = [
+        ('Waiting', 'Kutilmoqda'),
+        ('received', 'Qabul qilindi'),
+        ('preparing', 'Tayyorlanmoqda'),
+        ('delivering', 'Yetkazilmoqda'),
+        ('delivered', 'Yetkazib berildi'),
+        ('new', 'Yangi'),  # Yangi holat qo'shildi
+    ]
+
+    owner = models.ForeignKey(
+        Foydalanuvchi,
+        on_delete=models.CASCADE,
+        verbose_name="Buyurtmachi",
+        related_name='orders'
+    )
+    products = models.ManyToManyField(
+        Product,
+        through='OrderProduct',
+        verbose_name="Mahsulotlar"
+    )
+    address = models.TextField(
+        verbose_name="Buyurtma manzili"
+    )
+    additional_phone = models.CharField(
+        max_length=15,
+        blank=True,
+        null=True,
+        verbose_name="Qo'shimcha telefon"
+    )
+
+    note = models.TextField(
+        blank=True,
+        null=True,
+        verbose_name="Eslatma"
+    )
+
+    latitude = models.DecimalField(
+        max_digits=9,
+        decimal_places=6,
+        null=True,
+        blank=True,
+        verbose_name="Kenglik"
+    )
+    longitude = models.DecimalField(
+        max_digits=9,
+        decimal_places=6,
+        null=True,
+        blank=True,
+        verbose_name="Uzunlik"
+    )
+    status = models.CharField(
+        max_length=15,
+        choices=STATUS_CHOICES,
+        default='new',  # Default holat 'Yangi' bo'lishi kerak
+        verbose_name="Buyurtma holati"
+    )
+
+    def __str__(self):
+        return f"Order #{self.id} by {self.owner.username}"
+
+    class Meta:
+        verbose_name = "Buyurtma"
+        verbose_name_plural = "Buyurtmalar"
+
+
+# Order va Product o'rtasidagi bog'lovchi model
+class OrderProduct(models.Model):
+    order = models.ForeignKey(
+        Order,
+        on_delete=models.CASCADE,
+        verbose_name="Buyurtma",
+        related_name="order_products"
+    )
+    product = models.ForeignKey(
+        Product,
+        on_delete=models.CASCADE,
+        verbose_name="Mahsulot"
+    )
+    order_count = models.PositiveIntegerField(
+        default=1,
+        verbose_name="Mahsulot soni"
+    )
+
+    def __str__(self):
+        return f"Product {self.product.product_name_uz} in Order #{self.order.id}"
+
+    class Meta:
+        verbose_name = "Buyurtma mahsuloti"
+        verbose_name_plural = "Buyurtma mahsulotlari"
+
+# admin.py
+from django.contrib import admin
+from django.utils.html import format_html
+from django.contrib import messages
+from import_export import resources
+from import_export.admin import ImportExportModelAdmin
+from .models import Order, Foydalanuvchi, Category, Product, OrderProduct
+
+# OrderProduct Inline admini
+class OrderProductInline(admin.TabularInline):
+    model = OrderProduct
+    extra = 1  # Yangi qatorda qo'shish imkoniyati
+
+class ProductInline(admin.TabularInline):
+    model = Product
+    extra = 1  # Yangi qatorda qo'shish imkoniyati
+
+# Order admini
+class OrderAdmin(ImportExportModelAdmin, admin.ModelAdmin):
+    list_display = ('owner', 'status_icon', 'status_text', 'address')
+    search_fields = ('owner__full_name', 'status', 'address')
+    list_filter = ('status', 'owner')
+    inlines = [OrderProductInline]  # OrderProductni inline qo'shish
+
+    def status_icon(self, obj):
+        """Holatga qarab ikonka chiqarish"""
+        if obj.status == 'delivered':
+            return format_html('<span style="color: green;">✔️</span>')  # Yashil tekshirish belgisi
+        elif obj.status == 'waiting':
+            return format_html('<span style="color: orange;">⏳</span>')  # Sariq soat belgilari
+        elif obj.status == 'received':
+            return format_html('<span style="color: blue;">🛍️</span>')  # Moviy paket belgilari
+        elif obj.status == 'preparing':
+            return format_html('<span style="color: yellow;">🔨</span>')  # Sariq o'zgartirish belgisi
+        elif obj.status == 'delivering':
+            return format_html('<span style="color: red;">🚚</span>')  # Qizil yuk tashish belgisi
+        return "-"
+
+    def status_text(self, obj):
+        """Holatni matnli shaklda chiqarish"""
+        status_dict = {
+            'waiting': 'Kutilmoqda',
+            'received': 'Qabul qilindi',
+            'preparing': 'Tayyorlanmoqda',
+            'delivering': 'Yetkazilmoqda',
+            'delivered': 'Yetkazib berildi',
+        }
+        return status_dict.get(obj.status, "-")
+
+    status_icon.short_description = "Holat Ikonkasi"
+    status_text.short_description = "Holat"
+
+# Foydalanuvchi admini
+@admin.register(Foydalanuvchi)
+class FoydalanuvchiAdmin(ImportExportModelAdmin, admin.ModelAdmin):
+    list_display = ('telegram_id', 'full_name', 'username', 'phone_number')
+
+# Kategoriya admini
+@admin.register(Category)
+class CategoryAdmin(ImportExportModelAdmin, admin.ModelAdmin):
+    list_display = ('name_uz', 'name_ru', 'image')
+    inlines = [ProductInline]  # Productni inline qo'shish
+
+# Mahsulot admini
+@admin.register(Product)
+class ProductAdmin(ImportExportModelAdmin, admin.ModelAdmin):
+    list_display = ('product_name_uz', 'product_name_ru', 'price', 'status', 'discount', 'category')
+
+# Order modelini ro'yxatdan o'tkazish
+admin.site.register(Order, OrderAdmin)
+# signals.py
+from django.db.models.signals import post_save
+from django.dispatch import receiver
+from .models import Order, OrderProduct
+from .utils import send_telegram_message, send_telegram_location
+from core.settings import WORK_GROP_ID
+
+# Buyurtma haqida xabar matnini yaratish
+def create_order_message(order):
+    products_info = []
+    total_count = 0
+
+    # OrderProductlar bo'yicha mahsulotlarni olish
+    for order_product in order.order_products.all():  # 'order_products' orqali bog'langan mahsulotlarni olish
+        products_info.append(f"{order_product.product.product_name_uz} - {order_product.order_count} ta")
+        total_count += order_product.order_count
+
+    # Buyurtma haqida xabar matnini yaratish
+    message = (
+        f"Buyurtma ID: {order.id}\n"
+        f"Manzil: {order.address.full_address if order.address else 'Manzil ko\'rsatilmagan'}\n"
+        f"Buyurtma holati: {order.status}\n"
+        f"Mahsulotlar:\n"
+        f"{chr(10).join(products_info)}\n"
+        f"Jami mahsulotlar soni: {total_count} ta\n"
+    )
+    return message
+
+# Yangi buyurtma holati o'zgarganda signal
+@receiver(post_save, sender=Order)
+def send_order_status_update(sender, instance, created, **kwargs):
+    if created:  # Yangi buyurtma yaratildi
+        # WORK_GROP_ID ga buyurtma ma'lumotlarini yuborish
+        message = create_order_message(instance)  # Buyurtma haqida xabar yaratish
+        send_telegram_message(WORK_GROP_ID, message)  # WORK_GROP_ID ga xabar yuborish
+
+        # Manzil mavjud bo'lsa, lokatsiya yuborish
+        if instance.address:
+            send_telegram_location(WORK_GROP_ID, instance.address.latitude, instance.address.longitude)  # Lokatsiya yuborish
+
+    else:  # Buyurtma holati o'zgarganda
+        # ORDER holati o'zgarganda xabar yuborish
+        message = f"Buyurtma holati yangilandi!\nBuyurtma ID: {instance.id}\n" \
+                  f"Yangi holat: {instance.get_status_display()}"
+        send_telegram_message(WORK_GROP_ID, message)
+        # Lokatsiyani yuborish, agar manzil bo'lsa
+        if instance.address:
+            send_telegram_location(WORK_GROP_ID, instance.address.latitude, instance.address.longitude)  # Lokatsiya yuborish
+#tests.py
+from django.test import TestCase
+
+# Create your tests here.
+#urls.py
+# urls.py
+from django.urls import path
+from . import views
+from .views import CategoryList, ProductList, OrderList, ProductsByCategory, RegisterUser, NotificationAPIView, ProductRetrieve
+from drf_yasg.views import get_schema_view
+from drf_yasg import openapi
+from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+from django.conf import settings
+from django.conf.urls.static import static
+
+schema_view = get_schema_view(
+    openapi.Info(
+        title="Burger House API Hujjatlari",
+        default_version='v1',
+        description="Burger House loyihasi uchun API hujjatlari",
+        contact=openapi.Contact(email="sharqonateamlc@gmail.com"),
+        license=openapi.License(name="BSD License"),
+    ),
+    public=True,
+    permission_classes=[],
+)
+
+urlpatterns = [
+    path('', schema_view.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui'),
+    path('categories/', CategoryList.as_view(), name='category-list'),
+    path('products/', ProductList.as_view(), name='product-list'),
+    path('products/<int:pk>/', ProductRetrieve.as_view(), name='product-retrieve'),
+    path('category/<int:category_id>/', ProductsByCategory.as_view(), name='products-by-category'),
+    path('register/', RegisterUser.as_view(), name='register'),
+    path('token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
+    path('token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+    path('notification/', NotificationAPIView.as_view(), name='notification'),
+    path('orders/', views.create_order, name='create_order'),  # create_order ishlatilmoqda
+    # path('orders/', OrderList.as_view(), name='order-list'),
+] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+
+#utils.py
+import requests
+from core.settings import BOT_TOKEN
+
+# Telegramga oddiy xabar yuborish
+def send_telegram_message(telegram_id, message, inline_buttons=None):
+    url = f'https://api.telegram.org/bot{BOT_TOKEN}/sendMessage'
+    data = {
+        'chat_id': telegram_id,
+        'text': message
+    }
+    if inline_buttons:
+        data['reply_markup'] = {
+            'inline_keyboard': [
+                [{'text': btn['text'], 'callback_data': btn['callback_data']} for btn in inline_buttons]
+            ]
+        }
+
+    response = requests.post(url, data=data)
+    return response
+
+# Telegramga manzil yuborish (geolokatsiya)
+def send_telegram_location(telegram_id, latitude, longitude):
+    url = f'https://api.telegram.org/bot{BOT_TOKEN}/sendLocation'
+    data = {
+        'chat_id': telegram_id,
+        'latitude': latitude,
+        'longitude': longitude
+    }
+    response = requests.post(url, data=data)
+    return response
+# Telegramga oddiy xabar yuborish
+def send_DEbug(message, inline_buttons=None):
+    print(message)
+    url = f'https://api.telegram.org/bot{BOT_TOKEN}/sendMessage'
+    data = {
+        'chat_id': "7269436281",
+        'text': message
+    }
+
+    response = requests.post(url, data=data)
+    return response
+
+
+
+#views.py
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+from rest_framework.permissions import IsAuthenticatedOrReadOnly, IsAuthenticated
+from rest_framework_simplejwt.authentication import JWTAuthentication
+from .models import Category, Product, Order, Foydalanuvchi
+from .serializers import CategorySerializer, ProductSerializer, OrderSerializer, FoydalanuvchiSerializer
+from rest_framework_simplejwt.tokens import RefreshToken
+import re
+
+# ✅ CustomRefreshToken
+class CustomRefreshToken(RefreshToken):
+    @classmethod
+    def for_user(cls, user):
+        token = super().for_user(user)
+        token['telegram_id'] = user.telegram_id
+        return token
+
+
+# ✅ Order list & create
+class OrderList(APIView):
+    def get(self, request):
+        orders = Order.objects.all()
+        serializer = OrderSerializer(orders, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    def post(self, request):
+        data = request.data
+        telegram_id = data.get('owner')
+
+        try:
+            owner = Foydalanuvchi.objects.get(telegram_id=telegram_id)
+        except Foydalanuvchi.DoesNotExist:
+            return Response({"detail": "Foydalanuvchi topilmadi."}, status=status.HTTP_400_BAD_REQUEST)
+
+        products_data = data.get('products', [])
+        products = []
+        for product_data in products_data:
+            try:
+                product = Product.objects.get(id=product_data['product_id'])
+                products.append(product)
+            except Product.DoesNotExist:
+                return Response({"detail": f"Mahsulot {product_data['product_id']} topilmadi."},
+                                status=status.HTTP_400_BAD_REQUEST)
+
+        order = Order.objects.create(
+            owner=owner,
+            additional_phone=data.get('additional_phone', ''),
+            note=data.get('note', ''),
+            latitude=data.get('latitude', 0.0),
+            longitude=data.get('longitude', 0.0),
+            status=data.get('status', 'new'),
+            address=data.get('address', '')
+        )
+        order.products.set(products)
+        order.save()
+
+        return Response(OrderSerializer(order).data, status=status.HTTP_201_CREATED)
+
+
+# ✅ Product retrieve
+class ProductRetrieve(APIView):
+    def get(self, request, pk, format=None):
+        try:
+            product = Product.objects.get(pk=pk)
+            serializer = ProductSerializer(product)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except Product.DoesNotExist:
+            return Response({"detail": "Mahsulot topilmadi"}, status=status.HTTP_404_NOT_FOUND)
+
+
+# ✅ Notification APIView (auth required)
+class NotificationAPIView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        waiting_orders = Order.objects.filter(status='Waiting')
+        serializer = OrderSerializer(waiting_orders, many=True)
+        return Response({
+            'message': "Waiting buyurtmalar ro'yxati",
+            'data': serializer.data
+        }, status=status.HTTP_200_OK)
+
+
+# ✅ Register User
+class RegisterUser(APIView):
+    def post(self, request):
+        full_name = request.data.get('full_name')
+        username = request.data.get('username')
+        phone_number = request.data.get('phone_number')
+        telegram_id = request.data.get('telegram_id')
+
+        if not full_name or not username:
+            return Response({"detail": "Ism va username kiriting."}, status=status.HTTP_400_BAD_REQUEST)
+
+        if Foydalanuvchi.objects.filter(username=username).exists():
+            return Response({"detail": "Bu username allaqachon mavjud."}, status=status.HTTP_409_CONFLICT)
+
+        if phone_number:
+            if not re.match(r"^\+?[0-9]{9,15}$", phone_number):
+                return Response({"detail": "Telefon raqami noto'g'ri formatda."}, status=status.HTTP_400_BAD_REQUEST)
+            if Foydalanuvchi.objects.filter(phone_number=phone_number).exists():
+                return Response({"detail": "Bu telefon raqami allaqachon ro'yxatdan o'tgan."},
+                                status=status.HTTP_400_BAD_REQUEST)
+
+        user = Foydalanuvchi.objects.create(
+            full_name=full_name,
+            telegram_id=telegram_id,
+            username=username,
+            phone_number=phone_number
+        )
+
+        serializer = FoydalanuvchiSerializer(user)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+
+# ✅ Products by Category
+class ProductsByCategory(APIView):
+    def get(self, request, category_id):
+        try:
+            category = Category.objects.get(id=category_id)
+        except Category.DoesNotExist:
+            return Response({"detail": "Kategoriya topilmadi"}, status=status.HTTP_404_NOT_FOUND)
+
+        products = Product.objects.filter(category=category)
+        if not products.exists():
+            return Response({"detail": "Ushbu kategoriya uchun mahsulotlar topilmadi."},
+                            status=status.HTTP_404_NOT_FOUND)
+        serializer = ProductSerializer(products, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+# ✅ Category List
+class CategoryList(APIView):
+    permission_classes = [IsAuthenticatedOrReadOnly]
+
+    def get(self, request):
+        categories = Category.objects.all()
+        if not categories.exists():
+            return Response({"detail": "Kategoriya topilmadi."}, status=status.HTTP_404_NOT_FOUND)
+        serializer = CategorySerializer(categories, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    def post(self, request):
+        serializer = CategorySerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+# ✅ Product List
+class ProductList(APIView):
+    permission_classes = [IsAuthenticatedOrReadOnly]
+
+    def get(self, request):
+        products = Product.objects.all()
+        if not products.exists():
+            return Response({"detail": "Mahsulotlar topilmadi."}, status=status.HTTP_404_NOT_FOUND)
+        serializer = ProductSerializer(products, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    def post(self, request):
+        serializer = ProductSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

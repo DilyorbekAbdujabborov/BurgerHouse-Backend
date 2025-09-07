@@ -1,5 +1,4 @@
 from django.urls import path
-from . import views
 from .views import CategoryList, ProductList, OrderList, ProductsByCategory, RegisterUser, NotificationAPIView, ProductRetrieve
 from drf_yasg.views import get_schema_view
 from drf_yasg import openapi
@@ -29,7 +28,5 @@ urlpatterns = [
     path('token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('notification/', NotificationAPIView.as_view(), name='notification'),
-    path('orders/', views.create_order, name='create_order'),  # create_order ishlatilmoqda
-    # path('orders/', OrderList.as_view(), name='order-list'),
+    path('orders/', OrderList.as_view(), name='order-list'),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
-

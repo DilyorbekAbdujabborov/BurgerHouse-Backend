@@ -32,7 +32,6 @@ class Foydalanuvchi(models.Model):
         verbose_name = "Foydalanuvchi"
         verbose_name_plural = "Foydalanuvchilar"
 
-
 # Category modeli
 class Category(models.Model):
     name_uz = models.CharField(
@@ -57,12 +56,11 @@ class Category(models.Model):
         verbose_name = "Kategoriya"
         verbose_name_plural = "Kategoriyalar"
 
-
 # Product modeli
 class Product(models.Model):
     STATUS_PRODUCT = [
-        ('Yes', 'Bor'),
-        ('No', 'Hozircha yo`q'),
+        ('yes', 'Bor'),
+        ('no', 'Hozircha yo`q'),
     ]
 
     product_name_uz = models.CharField(
@@ -93,31 +91,32 @@ class Product(models.Model):
     status = models.CharField(
         max_length=15,
         choices=STATUS_PRODUCT,
-        default='Yes',
+        default='yes',
         verbose_name="Holat"
     )
-    discount = models.PositiveIntegerField(
-        default=0,
-        verbose_name="Mahsulot chegirmadagi narxi"
+    discount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0.00,
+        verbose_name="Chegirmadagi narx"
     )
 
     def __str__(self):
-        return self.product_name_uz
+        return self.product_name_uz or 'Nomsiz mahsulot'
 
     class Meta:
         verbose_name = "Mahsulot"
         verbose_name_plural = "Mahsulotlar"
 
-
 # Order modeli
 class Order(models.Model):
     STATUS_CHOICES = [
-        ('Waiting', 'Kutilmoqda'),
+        ('waiting', 'Kutilmoqda'),
         ('received', 'Qabul qilindi'),
         ('preparing', 'Tayyorlanmoqda'),
         ('delivering', 'Yetkazilmoqda'),
         ('delivered', 'Yetkazib berildi'),
-        ('new', 'Yangi'),  # Yangi holat qo'shildi
+        ('new', 'Yangi'),
     ]
 
     owner = models.ForeignKey(
@@ -140,13 +139,11 @@ class Order(models.Model):
         null=True,
         verbose_name="Qo'shimcha telefon"
     )
-
     note = models.TextField(
         blank=True,
         null=True,
         verbose_name="Eslatma"
     )
-
     latitude = models.DecimalField(
         max_digits=9,
         decimal_places=6,
@@ -164,7 +161,7 @@ class Order(models.Model):
     status = models.CharField(
         max_length=15,
         choices=STATUS_CHOICES,
-        default='new',  # Default holat 'Yangi' bo'lishi kerak
+        default='new',
         verbose_name="Buyurtma holati"
     )
 
@@ -174,7 +171,6 @@ class Order(models.Model):
     class Meta:
         verbose_name = "Buyurtma"
         verbose_name_plural = "Buyurtmalar"
-
 
 # Order va Product o'rtasidagi bog'lovchi model
 class OrderProduct(models.Model):
@@ -200,4 +196,3 @@ class OrderProduct(models.Model):
     class Meta:
         verbose_name = "Buyurtma mahsuloti"
         verbose_name_plural = "Buyurtma mahsulotlari"
-

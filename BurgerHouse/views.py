@@ -3,80 +3,59 @@ from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticatedOrReadOnly, IsAuthenticated
 from rest_framework_simplejwt.authentication import JWTAuthentication
-from .models import Category, Product, Order, Foydalanuvchi
+from .models import Category, Product, Order, Foydalanuvchi, OrderProduct
 from .serializers import CategorySerializer, ProductSerializer, OrderSerializer, FoydalanuvchiSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
-from rest_framework_simplejwt.exceptions import InvalidToken
-from rest_framework.decorators import api_view
-from django.http import JsonResponse
 import re
 
-# OrderList view
+# CustomRefreshToken
+class CustomRefreshToken(RefreshToken):
+    @classmethod
+    def for_user(cls, user):
+        token = super().for_user(user)
+        token['telegram_id'] = user.telegram_id
+        return token
+
+# Order list & create
 class OrderList(APIView):
     def get(self, request):
         orders = Order.objects.all()
         serializer = OrderSerializer(orders, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-# Create order view
-@api_view(['POST'])
-def create_order(request):
-    data = request.data
+    def post(self, request):
+        data = request.data
+        telegram_id = data.get('owner')
 
-    telegram_id = data.get('owner')
-    try:
-        owner = Foydalanuvchi.objects.get(telegram_id=telegram_id)
-    except Foydalanuvchi.DoesNotExist:
-        return JsonResponse({"detail": "Foydalanuvchi topilmadi."}, status=status.HTTP_400_BAD_REQUEST)
-
-    products_data = data.get('products', [])
-    products = []
-    for product_data in products_data:
         try:
-            product = Product.objects.get(id=product_data['product_id'])
-            products.append(product)
-        except Product.DoesNotExist:
-            return JsonResponse({"detail": f"Mahsulot {product_data['product_id']} topilmadi."}, status=status.HTTP_400_BAD_REQUEST)
+            owner = Foydalanuvchi.objects.get(telegram_id=telegram_id)
+        except Foydalanuvchi.DoesNotExist:
+            return Response({"detail": "Foydalanuvchi topilmadi."}, status=status.HTTP_400_BAD_REQUEST)
 
-    additional_phone = data.get('additional_phone', '')
-    note = data.get('note', '')
-    latitude = data.get('latitude', 0.0)
-    longitude = data.get('longitude', 0.0)
-    address =  data.get('address', '')
-    status_order = data.get('status', 'new')
+        products_data = data.get('products', [])
+        order = Order.objects.create(
+            owner=owner,
+            additional_phone=data.get('additional_phone', ''),
+            note=data.get('note', ''),
+            latitude=data.get('latitude', 0.0),
+            longitude=data.get('longitude', 0.0),
+            status=data.get('status', 'new'),
+            address=data.get('address', '')
+        )
 
-    order = Order.objects.create(
-        owner=owner,
-        additional_phone=additional_phone,
-        note=note,
-        latitude=latitude,
-        longitude=longitude,
-        status=status_order,
-        address=address
-    )
-    order.products.set(products)
-    order.save()
+        for product_data in products_data:
+            try:
+                product = Product.objects.get(id=product_data['product_id'])
+                count = product_data.get('count', 1)
+                OrderProduct.objects.create(order=order, product=product, order_count=count)
+            except Product.DoesNotExist:
+                order.delete()
+                return Response({"detail": f"Mahsulot {product_data['product_id']} topilmadi."},
+                                status=status.HTTP_400_BAD_REQUEST)
 
-    return JsonResponse({
-        "id": order.id,
-        "owner": order.owner.telegram_id,
-        "address": order.address,
-        "status": order.status,
-        "additional_phone": order.additional_phone,
-    }, status=status.HTTP_201_CREATED)
+        return Response(OrderSerializer(order).data, status=status.HTTP_201_CREATED)
 
-# CustomRefreshToken class
-class CustomRefreshToken(RefreshToken):
-    def __init__(self, user, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self['telegram_id'] = user.telegram_id
-
-    @classmethod
-    def for_user(cls, user):
-        token = cls(user)
-        return token
-
-# Product Retrieve view
+# Product retrieve
 class ProductRetrieve(APIView):
     def get(self, request, pk, format=None):
         try:
@@ -92,17 +71,14 @@ class NotificationAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        try:
-            waiting_orders = Order.objects.filter(status='Waiting')
-            serializer = OrderSerializer(waiting_orders, many=True)
-            return Response({
-                'message': "Waiting buyurtmalar ro'yxati",
-                'data': serializer.data
-            }, status=status.HTTP_200_OK)
-        except InvalidToken:
-            return Response({"detail": "Invalid or expired token"}, status=status.HTTP_401_UNAUTHORIZED)
+        waiting_orders = Order.objects.filter(status='waiting')
+        serializer = OrderSerializer(waiting_orders, many=True)
+        return Response({
+            'message': "Waiting buyurtmalar ro'yxati",
+            'data': serializer.data
+        }, status=status.HTTP_200_OK)
 
-# Register User view
+# Register User
 class RegisterUser(APIView):
     def post(self, request):
         full_name = request.data.get('full_name')
@@ -117,10 +93,11 @@ class RegisterUser(APIView):
             return Response({"detail": "Bu username allaqachon mavjud."}, status=status.HTTP_409_CONFLICT)
 
         if phone_number:
-            if not re.match(r"^\+?[0-9]{9,15}$", phone_number):  # Telefon raqamini tekshirish
+            if not re.match(r"^\+?[0-9]{9,15}$", phone_number):
                 return Response({"detail": "Telefon raqami noto'g'ri formatda."}, status=status.HTTP_400_BAD_REQUEST)
             if Foydalanuvchi.objects.filter(phone_number=phone_number).exists():
-                return Response({"detail": "Bu telefon raqami allaqachon ro'yxatdan o'tgan."}, status=status.HTTP_400_BAD_REQUEST)
+                return Response({"detail": "Bu telefon raqami allaqachon ro'yxatdan o'tgan."},
+                                status=status.HTTP_400_BAD_REQUEST)
 
         user = Foydalanuvchi.objects.create(
             full_name=full_name,
@@ -132,7 +109,7 @@ class RegisterUser(APIView):
         serializer = FoydalanuvchiSerializer(user)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
-# Products by Category view
+# Products by Category
 class ProductsByCategory(APIView):
     def get(self, request, category_id):
         try:
@@ -142,11 +119,12 @@ class ProductsByCategory(APIView):
 
         products = Product.objects.filter(category=category)
         if not products.exists():
-            return Response({"detail": "Ushbu kategoriya uchun mahsulotlar topilmadi."}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"detail": "Ushbu kategoriya uchun mahsulotlar topilmadi."},
+                            status=status.HTTP_404_NOT_FOUND)
         serializer = ProductSerializer(products, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-# Category List view (Authenticated or Read Only)
+# Category List
 class CategoryList(APIView):
     permission_classes = [IsAuthenticatedOrReadOnly]
 
@@ -164,7 +142,7 @@ class CategoryList(APIView):
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-# Product List view (Authenticated or Read Only)
+# Product List
 class ProductList(APIView):
     permission_classes = [IsAuthenticatedOrReadOnly]
 
@@ -172,11 +150,11 @@ class ProductList(APIView):
         products = Product.objects.all()
         if not products.exists():
             return Response({"detail": "Mahsulotlar topilmadi."}, status=status.HTTP_404_NOT_FOUND)
-        serializer = ProductSerializer(products, many=True)  # context ni olib tashlash
+        serializer = ProductSerializer(products, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
     def post(self, request):
-        serializer = ProductSerializer(data=request.data)  # context ni olib tashlash
+        serializer = ProductSerializer(data=request.data)
         if serializer.is_valid():
             serializer.save()
             return Response(serializer.data, status=status.HTTP_201_CREATED)

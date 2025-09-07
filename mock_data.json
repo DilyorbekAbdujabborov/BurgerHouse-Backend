@@ -1,0 +1,110 @@
+[
+  {
+    "model": "BurgerHouse.Foydalanuvchi",
+    "pk": 1,
+    "fields": {
+      "telegram_id": 123456789,
+      "full_name": "Dilyorbek Abdujabborov",
+      "username": "dilyorbek_dev",
+      "phone_number": "+998901112233"
+    }
+  },
+  {
+    "model": "BurgerHouse.Foydalanuvchi",
+    "pk": 2,
+    "fields": {
+      "telegram_id": 987654321,
+      "full_name": "Shaxobiddin Karimov",
+      "username": "shaxobiddin",
+      "phone_number": "+998909998877"
+    }
+  },
+  {
+    "model": "BurgerHouse.Category",
+    "pk": 1,
+    "fields": {
+      "name_uz": "Ichimliklar",
+      "name_ru": "Напитки",
+      "image": "images/drinks.png"
+    }
+  },
+  {
+    "model": "BurgerHouse.Category",
+    "pk": 2,
+    "fields": {
+      "name_uz": "Shirinliklar",
+      "name_ru": "Сладости",
+      "image": "images/sweets.png"
+    }
+  },
+  {
+    "model": "BurgerHouse.Product",
+    "pk": 1,
+    "fields": {
+      "product_name_uz": "Coca-Cola 1L",
+      "product_name_ru": "Coca-Cola 1L",
+      "product_image": "images/cola.png",
+      "category": 1,
+      "price": "12000.00",
+      "status": "yes",
+      "discount": "10000.00"
+    }
+  },
+  {
+    "model": "BurgerHouse.Product",
+    "pk": 2,
+    "fields": {
+      "product_name_uz": "Pepsi 1L",
+      "product_name_ru": "Pepsi 1L",
+      "product_image": "images/pepsi.png",
+      "category": 1,
+      "price": "11000.00",
+      "status": "yes",
+      "discount": "9000.00"
+    }
+  },
+  {
+    "model": "BurgerHouse.Product",
+    "pk": 3,
+    "fields": {
+      "product_name_uz": "Shokolad",
+      "product_name_ru": "Шоколад",
+      "product_image": "images/choco.png",
+      "category": 2,
+      "price": "15000.00",
+      "status": "no",
+      "discount": "0.00"
+    }
+  },
+  {
+    "model": "BurgerHouse.Order",
+    "pk": 1,
+    "fields": {
+      "owner": 1,
+      "address": "Toshkent, Chilonzor 15-kvartal",
+      "additional_phone": "+998931112233",
+      "note": "Eshik oldida qoldiring",
+      "latitude": 41.311081,
+      "longitude": 69.240562,
+      "status": "waiting"
+    }
+  },
+  {
+    "model": "BurgerHouse.OrderProduct",
+    "pk": 1,
+    "fields": {
+      "order": 1,
+      "product": 1,
+      "order_count": 2
+    }
+  },
+  {
+    "model": "BurgerHouse.OrderProduct",
+    "pk": 2,
+    "fields": {
+      "order": 1,
+      "product": 3,
+      "order_count": 1
+    }
+  }
+]

@@ -14,7 +14,6 @@ def send_telegram_message(telegram_id, message, inline_buttons=None):
                 [{'text': btn['text'], 'callback_data': btn['callback_data']} for btn in inline_buttons]
             ]
         }
-
     response = requests.post(url, data=data)
     return response
 
@@ -26,16 +25,5 @@ def send_telegram_location(telegram_id, latitude, longitude):
         'latitude': latitude,
         'longitude': longitude
     }
-    response = requests.post(url, data=data)
-    return response
-# Telegramga oddiy xabar yuborish
-def send_DEbug(message, inline_buttons=None):
-    print(message)
-    url = f'https://api.telegram.org/bot{BOT_TOKEN}/sendMessage'
-    data = {
-        'chat_id': "7269436281",
-        'text': message
-    }
-
     response = requests.post(url, data=data)
     return response
